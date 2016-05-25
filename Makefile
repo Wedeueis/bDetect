@@ -1,0 +1,16 @@
+# Makefile for VSS_VISION
+all: ballDetection_HSV
+
+# Variables definitions
+CPPFLAGS = $(shell pkg-config --cflags opencv --cflags jsoncpp)
+LDLIBS = $(shell pkg-config --libs opencv --libs jsoncpp)
+FLAGS = -Ofast -std=gnu++11 -g
+
+clean:
+	rm -f ballDetection_HSV
+	rm -f *.o
+
+# Compiling commands
+ballDetection_HSV.exe: ballDetection_HSV.cpp
+	g++ $< -o $@ -c $(LDLIBS) $(CPPFLAGS) $(FLAGS)
+
