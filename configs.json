@@ -1,8 +1,8 @@
 {
-   "ball_radius" : 20,
-   "ball_x" : 1303.75,
-   "ball_y" : 135,
-   "camera" : "/dev/video0",
+   "ball_radius" : 39,
+   "ball_x" : 388,
+   "ball_y" : 263,
+   "camera" : "/dev/video1",
    "cameraRes" : [ 720, 480 ],
    "circleWarpSize" : 100,
    "colors" : [
@@ -28,10 +28,10 @@
       ]
    ],
    "fieldCorners" : [
-      [ 224, 188 ],
-      [ 442, 186 ],
-      [ 476, 470 ],
-      [ 250, 474 ]
+      [ 16, 16 ],
+      [ 606, 28 ],
+      [ 624, 472 ],
+      [ 18, 462 ]
    ],
    "fieldSize" : [ 510, 390 ],
    "fieldSizeMM" : [ 1000, 800 ],

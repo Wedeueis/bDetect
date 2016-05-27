@@ -16,13 +16,14 @@ int selectedCorner = 0;
 char state = 'c';
 
 void on_trackbar(int);
-void changeCameraProp(std::string key, std::string value);
+void changeCameraProp(std::string key, std::string value, Json::Value root);
 void createTrackBars();
 cv::Mat fieldCornersUpdated(cv::Point2f perspectiveIn[], cv::Size size);
-void actionPickCorners(cv::VideoCapture &cap);
+void actionPickCorners(cv::VideoCapture &cap, Json::Value &root);
 void CallBackFunc(int event, int x, int y, int flags, void* userdata);
 void colorDetection(cv::Mat src, cv::Mat &mask, int it);
-void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours, std::vector<cv::Vec4i> &hierarchy);
+void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours,
+             std::vector<cv::Vec4i> &hierarchy, Json::Value &root, float k);
 
 int main(int, char**){
   //loading and testing json file
@@ -47,10 +48,10 @@ int main(int, char**){
   //plot = np.zeros((plotHeigth, plotWidth, 3), np.uint8)
   //cv2.resizeWindow("plots", plotWidth, plotHeigth)
 
-  changeCameraProp("focus_auto", "0");
-  changeCameraProp("exposure_auto_priority", "0");
-  changeCameraProp("exposure_auto", "1");
-  changeCameraProp("exposure_absolute", "75");
+  changeCameraProp("focus_auto", "0", root);
+  changeCameraProp("exposure_auto_priority", "0", root);
+  changeCameraProp("exposure_auto", "1", root);
+  changeCameraProp("exposure_absolute", "75", root);
   createTrackBars();
 
   std::string camera = root.get("camera", 1).asString();
@@ -85,10 +86,6 @@ int main(int, char**){
                                       root.get("fieldCorners",0)[2][1].asFloat() );
   fieldCorners[3] = cv::Point2f(root.get("fieldCorners",0)[3][0].asFloat(),
                                       root.get("fieldCorners",0)[3][1].asFloat() );
-
-  for(int i = 0; i < 4; i++){
-    std::cout << fieldCorners[i].x << " " << fieldCorners[i].y << std::endl;
-  }
 
   cv::Mat warpMatrix =  fieldCornersUpdated(fieldCorners, frameSize);
 
@@ -191,12 +188,6 @@ int main(int, char**){
 
   for(;;){
     /*
-    #
-    # Check for "pick corner" action
-    #
-    if (k == ord("f")):
-      actionPickCorners();
-
     if(k == ord('s')):
       if(SHOW_DISPLAY is True):
         SHOW_DISPLAY = False;
@@ -258,10 +249,9 @@ int main(int, char**){
     std::vector<std::vector<cv::Point> > contours;
     std::vector<cv::Vec4i> hierarchy;
 
-    findPos(bin, frame, contours, hierarchy);
+    findPos(bin, frame, contours, hierarchy, root, FIELD_MM);
 
     //show results
-    //namedWindow( "Contours", CV_WINDOW_AUTOSIZE );
     //Create a window
     cv::namedWindow("Frame", CV_WINDOW_AUTOSIZE);
 
@@ -270,13 +260,12 @@ int main(int, char**){
 
     cv::imshow("Frame",frame);
 
-    //cout << frame << ", " << frame << endl;
     int k = cv::waitKey(30);
     if (k == 27 || k == 'q')
       break;
     else if(k == 'f'){
       state = 'f';
-      actionPickCorners(cap);
+      actionPickCorners(cap, root);
       warpMatrix = fieldCornersUpdated(fieldCorners, frameSize);
       cv::warpPerspective(frame,warpedFrame,warpMatrix,fieldSize,cv::INTER_LINEAR,
                           cv::BORDER_CONSTANT, cv::Scalar() );
@@ -286,12 +275,9 @@ int main(int, char**){
   return 0;
 }
 
-void changeCameraProp(std::string key, std::string value){
+void changeCameraProp(std::string key, std::string value, Json::Value root){
 	if (system(NULL)) puts ("Ok");
   else exit (EXIT_FAILURE);
-  Json::Value root;
-	std::ifstream Config("configs.json");
-	Config >> root;
   std::string camera = root.get("camera", 1).asString();
   std::string s ="v4l2-ctl -d " + camera + "-c " + key + "=" + value;
   system(s.c_str());
@@ -314,7 +300,7 @@ void colorDetection(cv::Mat src, cv::Mat &mask, int it){
 	cv::Mat hsv, tgt, thrs;
 	//3-channel binary mask
 	cv::cvtColor(src, hsv, cv::COLOR_BGR2HSV);
-	cv::blur(hsv, hsv, cv::Size(3, 3));
+	cv::GaussianBlur(hsv, hsv, cv::Size(5, 5),0,0);
 	cv::inRange(hsv, cv::Scalar(colorH - rangeH, colorS - rangeS, colorV - rangeV), cv::Scalar(colorH + rangeH + 1 , colorS + rangeS +
 	1, colorV + rangeV + 1), mask);
 
@@ -322,20 +308,19 @@ void colorDetection(cv::Mat src, cv::Mat &mask, int it){
 	cv::Mat element = cv::getStructuringElement( 0,cv::Size( 2,2 ),cv::Point( 0, 0 ) );
   cv::erode( mask, mask, element, cv::Point( 0, 0 ), it	);
 	cv::dilate( mask, mask, element, cv::Point( 0, 0 ), 2*it +1);
-	cv::erode( mask, mask, element, cv::Point( 0, 0 ), it	);
-
 
 	//mask aplication
 	cv::Mat mask3[] = { mask,mask,mask };
 	cv::merge(mask3, 3, thrs);
 	cv::bitwise_and(thrs, src, tgt);
 
-	//cv::imshow("Bola", tgt);
+	cv::imshow("Bola", tgt);
 	//cv::imshow("HSV", hsv);
 
 }
 
-void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours, std::vector<cv::Vec4i> &hierarchy){
+void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours,
+              std::vector<cv::Vec4i> &hierarchy, Json::Value &root, float k){
 	cv::Mat temp = src.clone();
 
 	if( !temp.empty())
@@ -345,23 +330,25 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 		std::vector<cv::Point2f> center( contours.size() );
 		std::vector<float> radius( contours.size() );
 
-		int realBallRadius = 21, bestBallRadiusDif = 0, final_radius, bestBall = 0;
+		int realBallRadius = root.get("ball_radius", 0).asInt();
+    int bestBallRadiusDif = 0, final_radius, bestBall = 0;
 		cv::Point ball_center;
 		std::vector<cv::Point> hull;
 		double per, cntArea, relation, radiusDif;
 
 		for( int i = 0; i < contours.size(); i++ ){
-			cv::approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 3, true );//verificar se eh necessario
-			cv::minEnclosingCircle( (cv::Mat)contours_poly[i], center[i], radius[i] );
-			per = arcLength(contours[i], true);
-			cv::convexHull(contours[i], hull, true);
-			cntArea = cv::contourArea(hull,false) + 0.1;
-			relation = (per*radius[i])/2*cntArea;
+			//cv::approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 3, true );//verificar se eh necessario
+			cv::minEnclosingCircle( (cv::Mat)contours[i], center[i], radius[i] );
+			// per = arcLength(contours[i], true);
+			// cv::convexHull(contours[i], hull, true);
+			// cntArea = cv::contourArea(hull,false) + 0.1;
+			// relation = (per*radius[i])/2*cntArea;
+      radius[i] /= k;
 			radiusDif = abs(realBallRadius - radius[i]);
 			if(bestBall == 0 || radiusDif < bestBallRadiusDif){
 				final_radius = (int)radius[i];
-				ball_center.x = center[i].x;
-				ball_center.y = center[i].y;
+				ball_center.x = (int)center[i].x;
+				ball_center.y = (int)center[i].y;
 				bestBall = i;
 				bestBallRadiusDif = radiusDif;
 			}
@@ -369,6 +356,14 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 
 		if(bestBall != 0){
 			cv::circle( tgt, center[bestBall], (int)radius[bestBall], cv::Scalar(255,0,0), 2, 8, 0 );
+      root["ball_radius"] = final_radius;
+      root["ball_x"] = (int)(center[bestBall].x/k);
+      root["ball_y"] = (int)(center[bestBall].y/k);
+      std::ofstream configs;
+      configs.open("configs.json");
+      Json::StyledWriter styledWriter;
+      configs << styledWriter.write(root);
+      configs.close();
 		}
 }
 
@@ -391,105 +386,102 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata) {
 }
 
 cv::Mat fieldCornersUpdated(cv::Point2f perspectiveIn[], cv::Size fieldSize){
-    cv::Point2f perspectiveOut[] = { cv::Point2f(0.0, 0.0),
-                                   cv::Point2f(fieldSize.width , 0.0),
-                                   cv::Point2f(fieldSize.width, fieldSize.height),
-                                   cv::Point2f( 0.0, fieldSize.height) };
-    for(int i = 0; i < 4; i++){
-      std::cout << perspectiveIn[i].x << " " << perspectiveIn[i].y << std::endl;
-    }
-
-    for(int i = 0; i < 4; i++){
-      std::cout << perspectiveOut[i].x << " " << perspectiveOut[i].y << std::endl;
-    }
-
-    return cv::getPerspectiveTransform(perspectiveIn, perspectiveOut);
+  cv::Point2f perspectiveOut[] = { cv::Point2f(0.0, 0.0),
+                                 cv::Point2f(fieldSize.width , 0.0),
+                                 cv::Point2f(fieldSize.width, fieldSize.height),
+                                 cv::Point2f( 0.0, fieldSize.height) };
+  for(int i = 0; i < 4; i++){
+    std::cout << perspectiveIn[i].x << " " << perspectiveIn[i].y << std::endl;
   }
 
-  void actionPickCorners(cv::VideoCapture &cap) {
-    cv::namedWindow("pickCorners");
-    cv::setMouseCallback("pickCorners", CallBackFunc);
-    Json::Value root;
-    std::ifstream Config("configs.json");
-    Config >> root;
-    for(;;) {
-          int k = cv::waitKey(30);
-          if (k == 27 || k == 'q'){
-            state = 'c';
-            break;
-          }else if(k >= 49 and k <= 52)  //Change the selected corner on press 1-4 key
-            selectedCorner = k - 49;
-          else if(k >= 73 and k <= 76) { //Move 1px when
-            switch(k){
-              case 73:
-                fieldCorners[selectedCorner].y += -1;
-                std::cout << fieldCorners[selectedCorner].y << std::endl;
-                break;
-              case 74:
-                fieldCorners[selectedCorner].x += -1;
-                break;
-              case 75:
-                fieldCorners[selectedCorner].y += 1;
-                break;
-              case 76:
-                fieldCorners[selectedCorner].x += 1;
-                break;
-            }
+  for(int i = 0; i < 4; i++){
+    std::cout << perspectiveOut[i].x << " " << perspectiveOut[i].y << std::endl;
+  }
+
+  return cv::getPerspectiveTransform(perspectiveIn, perspectiveOut);
+}
+
+void actionPickCorners(cv::VideoCapture &cap, Json::Value &root) {
+  cv::namedWindow("pickCorners");
+  cv::setMouseCallback("pickCorners", CallBackFunc);
+  for(;;) {
+        int k = cv::waitKey(30);
+        if (k == 27 || k == 'q'){
+          state = 'c';
+          break;
+        }else if(k >= 49 and k <= 52)  //Change the selected corner on press 1-4 key
+          selectedCorner = k - 49;
+        else if(k >= 73 and k <= 76) { //Move 1px when
+          switch(k){
+            case 73:
+              fieldCorners[selectedCorner].y += -1;
+              std::cout << fieldCorners[selectedCorner].y << std::endl;
+              break;
+            case 74:
+              fieldCorners[selectedCorner].x += -1;
+              break;
+            case 75:
+              fieldCorners[selectedCorner].y += 1;
+              break;
+            case 76:
+              fieldCorners[selectedCorner].x += 1;
+              break;
           }
+        }
 
-          cv::Mat frame;
-          cap >> frame;
+        cv::Mat frame;
+        cap >> frame;
 
-          //Resize Frame
-          cv::resize(frame, frame, cv::Size((int)(frame.cols*resize),(int)(frame.rows*resize) ),
-                                                   0, 0, cv::INTER_AREA);
-          cv::resizeWindow("pickCorners", frame.cols, frame.rows);
+        //Resize Frame
+        cv::resize(frame, frame, cv::Size((int)(frame.cols*resize),(int)(frame.rows*resize) ),
+                                                 0, 0, cv::INTER_AREA);
+        cv::resizeWindow("pickCorners", frame.cols, frame.rows);
 
-          // Change status text
-          std::stringstream ss;
-          ss << (selectedCorner + 1);
-          std::string status( "Pick corner " + ss.str() );
-          cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
-                      cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
+        // Change status text
+        std::stringstream ss;
+        ss << (selectedCorner + 1);
+        std::string status( "Pick corner " + ss.str() );
+        cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
 
-          //Draw outline and highlight the selected corner
-          for(int i = 0; i < 4; i++) {
-            cv::Point2f cornerFrom( (int)(fieldCorners[i].x*resize),
-                                (int)(fieldCorners[i].y*resize) );
+        //Draw outline and highlight the selected corner
+        for(int i = 0; i < 4; i++) {
+          cv::Point2f cornerFrom( (int)(fieldCorners[i].x*resize),
+                              (int)(fieldCorners[i].y*resize) );
 
-            cv::Point2f cornerTo( (int)(fieldCorners[(i + 1) % 4].x*resize),
-                              (int)(fieldCorners[(i + 1) % 4].y*resize) );
+          cv::Point2f cornerTo( (int)(fieldCorners[(i + 1) % 4].x*resize),
+                            (int)(fieldCorners[(i + 1) % 4].y*resize) );
 
-            cv::line(frame,
+          cv::line(frame,
+            cornerFrom,
+            cornerTo,
+            cv::Scalar(0, 0, 255), 1,
+            cv::LINE_8, 0 );
+
+          if (i == selectedCorner) {
+            cv::circle(
+              frame,
               cornerFrom,
-              cornerTo,
-              cv::Scalar(0, 0, 255), 1,
+              3, cv::Scalar(0, 255, 0), 1,
               cv::LINE_8, 0 );
-
-            if (i == selectedCorner) {
-              cv::circle(
-                frame,
-                cornerFrom,
-                3, cv::Scalar(0, 255, 0), 1,
-                cv::LINE_8, 0 );
-            }
-
-            cv::imshow("pickCorners", frame);
           }
+
+          cv::imshow("pickCorners", frame);
+        }
+  }
+
+    cv::destroyWindow("pickCorners");
+
+    for(int i = 0; i<4; i++){
+      root["fieldCorners"][i][0] = fieldCorners[i].x;
+      root["fieldCorners"][i][1] = fieldCorners[i].y;
     }
 
-      cv::destroyWindow("pickCorners");
+    std::ofstream configs;
+    configs.open("configs.json");
 
-      for(int i = 0; i<4; i++){
-        root["fieldCorners"][i][0] = fieldCorners[i].x;
-        root["fieldCorners"][i][1] = fieldCorners[i].y;
-      }
+    Json::StyledWriter styledWriter;
+    configs << styledWriter.write(root);
 
-      std::ofstream configs;
-      configs.open("configs.json");
-
-      Json::StyledWriter styledWriter;
-      configs << styledWriter.write(root);
-
-      configs.close();
-  }
+    configs.close();
+}
