@@ -10,17 +10,16 @@
 cv::Scalar myints(16,2,77,29);
 int x_color = 0, y_color = 0;
 int colorH = 10, colorS = 229, colorV = 255, rangeH = 10, rangeS = 30, rangeV = 81;
-int mouse_x, mouse_y;//Posição do mouse
 cv::Point2f fieldCorners[4];
-float resize = 0.5;
+double resize = 0.5;
 int selectedCorner = 0;
 char state = 'c';
 
 void on_trackbar(int);
 void changeCameraProp(std::string key, std::string value);
 void createTrackBars();
-void fieldCornersUpdated(cv::Mat &mat, cv::Point2f perspectiveIn[], cv::Size size);
-void actionPickCorners();
+cv::Mat fieldCornersUpdated(cv::Point2f perspectiveIn[], cv::Size size);
+void actionPickCorners(cv::VideoCapture &cap);
 void CallBackFunc(int event, int x, int y, int flags, void* userdata);
 void colorDetection(cv::Mat src, cv::Mat &mask, int it);
 void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours, std::vector<cv::Vec4i> &hierarchy);
@@ -86,99 +85,15 @@ int main(int, char**){
                                       root.get("fieldCorners",0)[2][1].asFloat() );
   fieldCorners[3] = cv::Point2f(root.get("fieldCorners",0)[3][0].asFloat(),
                                       root.get("fieldCorners",0)[3][1].asFloat() );
-  cv::Mat test;
+
+  for(int i = 0; i < 4; i++){
+    std::cout << fieldCorners[i].x << " " << fieldCorners[i].y << std::endl;
+  }
+
+  cv::Mat warpMatrix =  fieldCornersUpdated(fieldCorners, frameSize);
 
   /*
-  fieldCornersUpdated(test, fieldCorners, fieldSize);
-    ###############################################################################################
-    ####################################### CONFIGURE CORNERS ######################################
-    ###############################################################################################
 
-    void actionPickCorners(){
-      int key = 0;
-      cv::namedWindow("pickCorners");
-      cv::setMouseCallback("pickCorners", CallBackFunc, NULL);
-      while(1){
-        cap(capNumber);
-        k = cv::waitKey(30);
-        if(k=='q' || k == 's' || k == 27)
-          break;
-      }
-    }
-
-    def actionPickCorners():
-    	selectedCorner = 0;
-
-    	k = None;
-    	width = None;
-    	height = None;
-    	resize = 0.5;
-
-    	def handleMouse(event, x, y, flags, params):
-    		if event == cv2.EVENT_LBUTTONUP:
-    			fieldCorners[selectedCorner] = [x / resize, y / resize];
-
-    	cv2.namedWindow("pickCorners");
-    	cv2.setMouseCallback("pickCorners", handleMouse);
-
-    	while(k != ord("s") and k != ord("q")):
-    		# Read Key and read Video frame
-    		k = cv2.waitKey(20) & 0xFF;
-    		ret, frame = cap.read()
-
-    		# Save shape for further use
-    		height, width = frame.shape[:2];
-
-    		# Resize Frame
-    		frame = cv2.resize(frame, ((int)(width * resize), (int)(height * resize)));
-    		cv2.resizeWindow("pickCorners", (int)(width * resize), (int)(height * resize));
-
-    		# Change the selected corner on press 1-4 key
-    		if(k >= ord("1") and k <= ord("4")):
-    			selectedCorner = k - ord("1");
-
-    		# Move 1px when
-    		if(k >= 81 and k <= 84):
-    			delta = [[-1,0],[0,-1],[1,0],[0,1]][k - 81];
-    			fieldCorners[selectedCorner][0] += delta[0];
-    			fieldCorners[selectedCorner][1] += delta[1];
-
-    		# Change status text
-    		status = "Pick corner " + str(selectedCorner + 1);
-    		cv2.putText(frame, status, (10,30), font, 0.8, (255, 0, 0), 2);
-
-    		# Draw outline and highlight the selected corner
-    		for i in range(4):
-    			cornerFrom = fieldCorners[i];
-    			cornerFrom = (
-    				(int)(cornerFrom[0] * resize),
-    				(int)(cornerFrom[1] * resize)
-    			);
-
-    			cornerTo = fieldCorners[(i + 1) % 4];
-    			cornerTo = (
-    				(int)(cornerTo[0] * resize),
-    				(int)(cornerTo[1] * resize)
-    			);
-
-    			cv2.line(frame,
-    				cornerFrom,
-    				cornerTo,
-    				(0, 0, 255), 1
-    			);
-
-    			if i == selectedCorner:
-    				cv2.circle(
-    					frame,
-    					cornerFrom,
-    					3, (0, 255, 0), 1);
-
-    		cv2.imshow("pickCorners", frame);
-
-    	cv2.destroyWindow("pickCorners");
-
-    	configs.set("fieldCorners", fieldCorners);
-    	fieldCornersUpdated();
     ###############################################################################################
     ####################################### CONFIGURE COLORS ######################################
     ###############################################################################################
@@ -332,6 +247,11 @@ int main(int, char**){
 
     cv::Mat frame, bin;
     cap >> frame; // get a new frame from camera
+    cv::Mat warpedFrame = frame.clone();
+    cv::warpPerspective(frame,warpedFrame,warpMatrix,frame.size(),cv::INTER_NEAREST,
+                        cv::BORDER_CONSTANT, cv::Scalar() );
+    frame = warpedFrame;
+    warpedFrame.release();
 
     colorDetection(frame, bin, 2);
 
@@ -348,16 +268,20 @@ int main(int, char**){
     //set the callback function for any mouse event
     cv::setMouseCallback("Frame", CallBackFunc, NULL);
 
-    cv::imshow("Frame", frame);
+    cv::imshow("Frame",frame);
 
     //cout << frame << ", " << frame << endl;
     int k = cv::waitKey(30);
     if (k == 27 || k == 'q')
       break;
-    else if(k == 'c')
-      state = 'c';
-    else if(k == 'f')
+    else if(k == 'f'){
       state = 'f';
+      actionPickCorners(cap);
+      warpMatrix = fieldCornersUpdated(fieldCorners, frameSize);
+      cv::warpPerspective(frame,warpedFrame,warpMatrix,fieldSize,cv::INTER_LINEAR,
+                          cv::BORDER_CONSTANT, cv::Scalar() );
+    }
+
   }
   return 0;
 }
@@ -406,8 +330,8 @@ void colorDetection(cv::Mat src, cv::Mat &mask, int it){
 	cv::merge(mask3, 3, thrs);
 	cv::bitwise_and(thrs, src, tgt);
 
-	imshow("Bola", tgt);
-	imshow("HSV", hsv);
+	//cv::imshow("Bola", tgt);
+	//cv::imshow("HSV", hsv);
 
 }
 
@@ -449,9 +373,123 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 }
 
 void CallBackFunc(int event, int x, int y, int flags, void* userdata) {
-     if  ( event == cv::EVENT_LBUTTONDOWN )
-     {
-          mouse_x = x;
-					mouse_y = y;
-     }
+    switch (state) {
+      case 'c':
+        if  ( event == cv::EVENT_LBUTTONDOWN )
+        {
+             x_color = x;
+   					 y_color = y;
+        }
+        break;
+      case 'f':
+         if  ( event == cv::EVENT_LBUTTONDOWN ) {
+           fieldCorners[selectedCorner].x = (x / resize);
+           fieldCorners[selectedCorner].y = (y / resize);
+         }
+        break;
+    }
 }
+
+cv::Mat fieldCornersUpdated(cv::Point2f perspectiveIn[], cv::Size fieldSize){
+    cv::Point2f perspectiveOut[] = { cv::Point2f(0.0, 0.0),
+                                   cv::Point2f(fieldSize.width , 0.0),
+                                   cv::Point2f(fieldSize.width, fieldSize.height),
+                                   cv::Point2f( 0.0, fieldSize.height) };
+    for(int i = 0; i < 4; i++){
+      std::cout << perspectiveIn[i].x << " " << perspectiveIn[i].y << std::endl;
+    }
+
+    for(int i = 0; i < 4; i++){
+      std::cout << perspectiveOut[i].x << " " << perspectiveOut[i].y << std::endl;
+    }
+
+    return cv::getPerspectiveTransform(perspectiveIn, perspectiveOut);
+  }
+
+  void actionPickCorners(cv::VideoCapture &cap) {
+    cv::namedWindow("pickCorners");
+    cv::setMouseCallback("pickCorners", CallBackFunc);
+    Json::Value root;
+    std::ifstream Config("configs.json");
+    Config >> root;
+    for(;;) {
+          int k = cv::waitKey(30);
+          if (k == 27 || k == 'q'){
+            state = 'c';
+            break;
+          }else if(k >= 49 and k <= 52)  //Change the selected corner on press 1-4 key
+            selectedCorner = k - 49;
+          else if(k >= 73 and k <= 76) { //Move 1px when
+            switch(k){
+              case 73:
+                fieldCorners[selectedCorner].y += -1;
+                std::cout << fieldCorners[selectedCorner].y << std::endl;
+                break;
+              case 74:
+                fieldCorners[selectedCorner].x += -1;
+                break;
+              case 75:
+                fieldCorners[selectedCorner].y += 1;
+                break;
+              case 76:
+                fieldCorners[selectedCorner].x += 1;
+                break;
+            }
+          }
+
+          cv::Mat frame;
+          cap >> frame;
+
+          //Resize Frame
+          cv::resize(frame, frame, cv::Size((int)(frame.cols*resize),(int)(frame.rows*resize) ),
+                                                   0, 0, cv::INTER_AREA);
+          cv::resizeWindow("pickCorners", frame.cols, frame.rows);
+
+          // Change status text
+          std::stringstream ss;
+          ss << (selectedCorner + 1);
+          std::string status( "Pick corner " + ss.str() );
+          cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                      cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
+
+          //Draw outline and highlight the selected corner
+          for(int i = 0; i < 4; i++) {
+            cv::Point2f cornerFrom( (int)(fieldCorners[i].x*resize),
+                                (int)(fieldCorners[i].y*resize) );
+
+            cv::Point2f cornerTo( (int)(fieldCorners[(i + 1) % 4].x*resize),
+                              (int)(fieldCorners[(i + 1) % 4].y*resize) );
+
+            cv::line(frame,
+              cornerFrom,
+              cornerTo,
+              cv::Scalar(0, 0, 255), 1,
+              cv::LINE_8, 0 );
+
+            if (i == selectedCorner) {
+              cv::circle(
+                frame,
+                cornerFrom,
+                3, cv::Scalar(0, 255, 0), 1,
+                cv::LINE_8, 0 );
+            }
+
+            cv::imshow("pickCorners", frame);
+          }
+    }
+
+      cv::destroyWindow("pickCorners");
+
+      for(int i = 0; i<4; i++){
+        root["fieldCorners"][i][0] = fieldCorners[i].x;
+        root["fieldCorners"][i][1] = fieldCorners[i].y;
+      }
+
+      std::ofstream configs;
+      configs.open("configs.json");
+
+      Json::StyledWriter styledWriter;
+      configs << styledWriter.write(root);
+
+      configs.close();
+  }
