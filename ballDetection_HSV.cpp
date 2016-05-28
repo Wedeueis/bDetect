@@ -23,9 +23,9 @@ cv::Mat fieldCornersUpdated(cv::Point2f perspectiveIn[], cv::Size size);
 void actionPickCorners(cv::VideoCapture &cap, Json::Value &root);
 void actionConfigureColors(cv::VideoCapture &cap, Json::Value &root);
 void CallBackFunc(int event, int x, int y, int flags, void* userdata);
-void colorDetection(cv::Mat src, cv::Mat &mask, int it);
+void colorDetection(cv::Mat src, cv::Mat &mask,cv::Scalar colors[], int it);
 void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours,
-             std::vector<cv::Vec4i> &hierarchy, Json::Value &root, float k);
+              std::vector<cv::Vec4i> &hierarchy, Json::Value &root, float k);
 
 int main(int, char**){
   //loading and testing json file
@@ -88,7 +88,7 @@ int main(int, char**){
                                       root.get("fieldCorners",0)[2][1].asFloat() );
   fieldCorners[3] = cv::Point2f(root.get("fieldCorners",0)[3][0].asFloat(),
                                       root.get("fieldCorners",0)[3][1].asFloat() );
-  /*
+
   cv::Scalar colors[6] = {cv::Scalar( root.get("colors",0)["blue"][0].asInt() ,
                     root.get("colors",0)["blue"][1].asInt() ,
                     root.get("colors",0)["blue"][2].asInt() ),
@@ -108,7 +108,7 @@ int main(int, char**){
                     root.get("colors",0)["yellow"][1].asInt() ,
                     root.get("colors",0)["yellow"][2].asInt()),
                   };
-  */
+
   cv::Mat warpMatrix =  fieldCornersUpdated(fieldCorners, frameSize);
 
   for(;;){
@@ -168,10 +168,11 @@ int main(int, char**){
     Gframe = warpedFrame;
     warpedFrame.release();
 
-    colorDetection(Gframe, bin, 2);
+    colorDetection(Gframe, bin, colors, 3);
 
     std::vector<std::vector<cv::Point> > contours;
     std::vector<cv::Vec4i> hierarchy;
+    //std::vector<cv::Vec3f> circles;
 
     findPos(bin, Gframe, contours, hierarchy, root, FIELD_MM);
 
@@ -220,30 +221,31 @@ void changeCameraProp(std::string key, std::string value, Json::Value root){
 
 void createTrackBars(){
 	//create the trackbars
-	cv::namedWindow("TrackBar", 1);
-	cvCreateTrackbar("HUE", "TrackBar", &colorH, 255, on_trackbar);
-	cvCreateTrackbar("SATURATION", "TrackBar", &colorS, 255, on_trackbar);
-	cvCreateTrackbar("VALUE", "TrackBar", &colorV, 255, on_trackbar);
-	cvCreateTrackbar("RANGE_H", "TrackBar", &rangeH, 128, on_trackbar);
-	cvCreateTrackbar("RANGE_S", "TrackBar", &rangeS, 128, on_trackbar);
-	cvCreateTrackbar("RANGE_V", "TrackBar", &rangeV, 128, on_trackbar);
+	cv::namedWindow("Control", 1);
+	//cvCreateTrackbar("HUE", "TrackBar", &colorH, 255, on_trackbar);
+	//cvCreateTrackbar("SATURATION", "TrackBar", &colorS, 255, on_trackbar);
+	//cvCreateTrackbar("VALUE", "TrackBar", &colorV, 255, on_trackbar);
+	cvCreateTrackbar("RANGE_H", "Control", &rangeH, 128, on_trackbar);
+	cvCreateTrackbar("RANGE_S", "Control", &rangeS, 128, on_trackbar);
+	cvCreateTrackbar("RANGE_V", "Control", &rangeV, 128, on_trackbar);
 }
 
 void on_trackbar(int){};
 
 //Function to create a color mask and "cut" the ball in the source image
-void colorDetection(cv::Mat src, cv::Mat &mask, int it){
+void colorDetection(cv::Mat src, cv::Mat &mask, cv::Scalar colors[], int it){
 	cv::Mat hsv, tgt, thrs;
 	//3-channel binary mask
 	cv::cvtColor(src, hsv, cv::COLOR_BGR2HSV);
-	cv::GaussianBlur(hsv, hsv, cv::Size(5, 5),0,0);
-	cv::inRange(hsv, cv::Scalar(colorH - rangeH, colorS - rangeS, colorV - rangeV), cv::Scalar(colorH + rangeH + 1 , colorS + rangeS +
-	1, colorV + rangeV + 1), mask);
-
+	cv::GaussianBlur(hsv, hsv, cv::Size(3, 3),0,0);
+	cv::inRange(hsv, cv::Scalar(colors[2][0] - rangeH, colors[2][1] - rangeS, colors[2][2] - rangeV),
+              cv::Scalar(colors[2][0]  + rangeH + 1 , colors[2][1]  + rangeS + 1, colors[2][2]  + rangeV + 1), mask);
+  hsv.release();
 	//image erosion
-	cv::Mat element = cv::getStructuringElement( 0,cv::Size( 2,2 ),cv::Point( 0, 0 ) );
-  cv::erode( mask, mask, element, cv::Point( 0, 0 ), it	);
-	cv::dilate( mask, mask, element, cv::Point( 0, 0 ), 2*it +1);
+	cv::Mat element = cv::getStructuringElement( cv::MORPH_RECT,cv::Size( 21,21 ),cv::Point( -1, -1 ) );
+  cv::Mat element2 = cv::getStructuringElement( cv::MORPH_RECT,cv::Size( 11,11 ),cv::Point( -1, -1 ) );
+  cv::morphologyEx( mask, mask, cv::MORPH_CLOSE, element);
+	cv::morphologyEx( mask, mask, cv::MORPH_OPEN, element2);
 
 	//mask aplication
 	cv::Mat mask3[] = { mask,mask,mask };
@@ -251,10 +253,51 @@ void colorDetection(cv::Mat src, cv::Mat &mask, int it){
 	cv::bitwise_and(thrs, src, tgt);
 
 	cv::imshow("Bola", tgt);
-	//cv::imshow("HSV", hsv);
+	cv::imshow("HSV", mask);
 
 }
 
+/*
+void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<cv::Vec3f> &circles,
+            Json::Value &root, float k){
+
+    cv::HoughCircles(src,circles,cv::HOUGH_GRADIENT,2,src.rows/4,200,20 );
+		//select best contour
+
+		int realBallRadius = root.get("ball_radius", 0).asInt();
+    int bestBallRadiusDif = 0, final_radius, bestBall = 0;
+    int ball = 0;
+		cv::Point ball_center;
+		double radiusDif;
+
+		for( int i = 0; i < circles.size(); i++ ){
+      std::cout << circles[i][2] << std::endl;
+      //circles[i][2] /= k;
+      std::cout << circles[i][2] << std::endl;
+			radiusDif = abs(realBallRadius - circles[i][2]);
+			if(bestBall == 0 || radiusDif < bestBallRadiusDif){
+        ball = 1;
+        final_radius = round(circles[i][2]);
+				ball_center.x = round(circles[i][0]);
+				ball_center.y = round(circles[i][1]);
+				bestBall = i;
+				bestBallRadiusDif = radiusDif;
+			}
+		}
+
+		if(ball != 0){
+			cv::circle( tgt, cv::Point(circles[bestBall][0],circles[bestBall][1]),
+                  (int)circles[bestBall][2], cv::Scalar(255,0,0), 2, 8, 0 );
+      root["ball_x"] = (int)(circles[bestBall][0]/k);
+      root["ball_y"] = (int)(circles[bestBall][1]/k);
+      std::ofstream configs;
+      configs.open("configs.json");
+      Json::StyledWriter styledWriter;
+      configs << styledWriter.write(root);
+      configs.close();
+		}
+}
+*/
 //Function to find the ball position in the screen
 void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours,
               std::vector<cv::Vec4i> &hierarchy, Json::Value &root, float k){
@@ -268,21 +311,17 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 		std::vector<float> radius( contours.size() );
 
 		int realBallRadius = root.get("ball_radius", 0).asInt();
-    int bestBallRadiusDif = 0, final_radius, bestBall = 0;
+    int bestBallRadiusDif = 0, final_radius, bestBall = 0, ball=0;
 		cv::Point ball_center;
-		std::vector<cv::Point> hull;
-		double per, cntArea, relation, radiusDif;
+		double radiusDif;
 
 		for( int i = 0; i < contours.size(); i++ ){
 			//cv::approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 3, true );//verificar se eh necessario
 			cv::minEnclosingCircle( (cv::Mat)contours[i], center[i], radius[i] );
-			// per = arcLength(contours[i], true);
-			// cv::convexHull(contours[i], hull, true);
-			// cntArea = cv::contourArea(hull,false) + 0.1;
-			// relation = (per*radius[i])/2*cntArea;
-      radius[i] /= k;
+      //radius[i] /= k;
 			radiusDif = abs(realBallRadius - radius[i]);
 			if(bestBall == 0 || radiusDif < bestBallRadiusDif){
+        ball = 1;
 				final_radius = (int)radius[i];
 				ball_center.x = (int)center[i].x;
 				ball_center.y = (int)center[i].y;
@@ -291,9 +330,8 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 			}
 		}
 
-		if(bestBall != 0){
+		if(ball != 0){
 			cv::circle( tgt, center[bestBall], (int)radius[bestBall], cv::Scalar(255,0,0), 2, 8, 0 );
-      root["ball_radius"] = final_radius;
       root["ball_x"] = (int)(center[bestBall].x/k);
       root["ball_y"] = (int)(center[bestBall].y/k);
       std::ofstream configs;
@@ -325,7 +363,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata) {
     			//Get Region of Interest
     			cv::Rect roi(x1,y1,x2-x1, y2-y1);
           cv::Mat image_roi = Gframe(roi);
-    			cv::cvtColor(image_roi,image_roi, cv::COLOR_BGR2Lab, 0);
+    			cv::cvtColor(image_roi,image_roi, cv::COLOR_BGR2HSV, 0);
 
           //create a round mask
           cv::Mat mask_pickcolor(offset*2,offset*2,CV_8UC1,cv::Scalar(1,1,1));
@@ -515,15 +553,15 @@ void actionConfigureColors(cv::VideoCapture &cap, Json::Value &root) {
 
     //Get LAB Color of Mouse point
     std::stringstream ss1, ss2, ss3;
-    int color_lab_L = round(mean_color[0]);
-    ss1 << color_lab_L;
-    int color_lab_A = round(mean_color[1]);
-    ss2 << color_lab_A;
-    int color_lab_B = round(mean_color[2]);
-    ss3 << color_lab_B;
-    std::string color_lab("["+ ss1.str() +","+ ss2.str() +","+ ss3.str() +"]");
+    int color_hsv_H = round(mean_color[0]);
+    ss1 << color_hsv_H;
+    int color_hsv_S = round(mean_color[1]);
+    ss2 << color_hsv_S;
+    int color_hsv_V = round(mean_color[2]);
+    ss3 << color_hsv_V;
+    std::string color_hsv("["+ ss1.str() +","+ ss2.str() +","+ ss3.str() +"]");
 
-    cv::putText(frame, color_lab, cv::Point(10,60), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+    cv::putText(frame, color_hsv, cv::Point(10,60), cv::FONT_HERSHEY_SIMPLEX, 0.8,
                 cv::Scalar(55, 255, 55), 2, cv::LINE_8, false);
 
     cv::circle(frame,cv::Point(x_color,y_color),offset,cv::Scalar(255,255,0),1);
@@ -538,9 +576,9 @@ void actionConfigureColors(cv::VideoCapture &cap, Json::Value &root) {
       selectedColor = k - 49;
     }else if(k == 's') {
       //função de gravar no json
-      root["colors"][Scolor][0] = color_lab_L;
-      root["colors"][Scolor][1] = color_lab_A;
-      root["colors"][Scolor][2] = color_lab_B;
+      root["colors"][Scolor][0] = color_hsv_H;
+      root["colors"][Scolor][1] = color_hsv_S;
+      root["colors"][Scolor][2] = color_hsv_V;
       std::ofstream configs;
       configs.open("configs.json");
       Json::StyledWriter styledWriter;
