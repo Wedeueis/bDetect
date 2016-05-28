@@ -14,13 +14,14 @@ int colorH = 10, colorS = 229, colorV = 255, rangeH = 10, rangeS = 30, rangeV = 
 cv::Point2f fieldCorners[4];
 double resize = 0.5;
 int selectedCorner = 0;
-char state = 'c';
+char state = 'd';
 
 void on_trackbar(int);
 void changeCameraProp(std::string key, std::string value, Json::Value root);
 void createTrackBars();
 cv::Mat fieldCornersUpdated(cv::Point2f perspectiveIn[], cv::Size size);
 void actionPickCorners(cv::VideoCapture &cap, Json::Value &root);
+void actionConfigureColors(cv::VideoCapture &cap, Json::Value &root);
 void CallBackFunc(int event, int x, int y, int flags, void* userdata);
 void colorDetection(cv::Mat src, cv::Mat &mask, int it);
 void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours,
@@ -87,77 +88,28 @@ int main(int, char**){
                                       root.get("fieldCorners",0)[2][1].asFloat() );
   fieldCorners[3] = cv::Point2f(root.get("fieldCorners",0)[3][0].asFloat(),
                                       root.get("fieldCorners",0)[3][1].asFloat() );
-
-  cv::Mat warpMatrix =  fieldCornersUpdated(fieldCorners, frameSize);
-
   /*
-
-    ###############################################################################################
-    ####################################### CONFIGURE COLORS ######################################
-    ###############################################################################################
-
-    def actionConfigureColors():
-    	colors = configs.get('colors');
-    	selectedColor = 0;
-    	colors2 = colors
-    	k = None;
-    	frame = None;
-    	width = None;
-    	height = None;
-    	resize = 0.5;
-
-
-    	# Radius of measure Color mean
-    	offset = 10
-
-
-
-    	cv2.namedWindow("pickColors");
-    	cv2.setMouseCallback("pickColors", handleMouse);
-
-      	while k != ord("q"):
-      		# Read Key and read Video frame
-      		k = cv2.waitKey(20) & 0xFF;
-      		ret, frame = cap.read()
-
-      		# Save shape for further use
-      		height, width = frame.shape[:2];
-
-      		# Change the selected corner on press 1-5 key
-      		if(k >= ord("1") and k <= ord("9")):
-      			selectedColor = k - ord("1");
-
-      		# Change status text
-      		if(selectedColor >= len(colors)):
-      			selectedColor = len(colors) - 1;
-
-      		color = colors[selectedColor];
-      		status = "Pick color " + str(color[0]);
-      		cv2.putText(frame, status, (10,30), font, 0.8, (255, 0, 0), 2);
-
-      		# Get LAB Color of Mouse point
-      		color_lab_L = round(meanColor[0])
-      		color_lab_A = round(meanColor[1])
-      		color_lab_B = round(meanColor[2])
-      		color_lab = "["+str(color_lab_L)+","+str(color_lab_A)+","+str(color_lab_B)+"]"
-
-      		cv2.putText(frame, str(color_lab), (10,60), font, 0.8, (55, 255, 55), 2);
-
-      		cv2.circle(frame,(x_color,y_color),offset,(255,255,0),1)
-
-      		if(k == ord("s")):
-      			print "funcao de garvar no json"
-
-      		cv2.imshow("pickColors", frame);
-
-
-      	cv2.destroyWindow("pickColors");
-
-      	#configs.set("fieldCorners", fieldCorners);
-
-      SHOW_DISPLAY = True;
-
+  cv::Scalar colors[6] = {cv::Scalar( root.get("colors",0)["blue"][0].asInt() ,
+                    root.get("colors",0)["blue"][1].asInt() ,
+                    root.get("colors",0)["blue"][2].asInt() ),
+       cv::Scalar( root.get("colors",0)["green"][0].asInt() ,
+                    root.get("colors",0)["green"][1].asInt() ,
+                    root.get("colors",0)["green"][2].asInt() ),
+       cv::Scalar( root.get("colors",0)["orange"][0].asInt() ,
+                    root.get("colors",0)["orange"][1].asInt() ,
+                    root.get("colors",0)["orange"][2].asInt() ),
+       cv::Scalar( root.get("colors",0)["purple"][0].asInt() ,
+                    root.get("colors",0)["purple"][1].asInt() ,
+                    root.get("colors",0)["purple"][2].asInt() ),
+       cv::Scalar( root.get("colors",0)["red"][0].asInt() ,
+                    root.get("colors",0)["red"][1].asInt() ,
+                    root.get("colors",0)["red"][2].asInt() ),
+       cv::Scalar( root.get("colors",0)["yellow"][0].asInt() ,
+                    root.get("colors",0)["yellow"][1].asInt() ,
+                    root.get("colors",0)["yellow"][2].asInt()),
+                  };
   */
+  cv::Mat warpMatrix =  fieldCornersUpdated(fieldCorners, frameSize);
 
   for(;;){
     /*
@@ -208,7 +160,6 @@ int main(int, char**){
     out = field;
     t.end();
     */
-
     cv::Mat bin;
     cap >> Gframe; // get a new frame from camera
     cv::Mat warpedFrame = Gframe.clone();
@@ -242,8 +193,19 @@ int main(int, char**){
       warpMatrix = fieldCornersUpdated(fieldCorners, frameSize);
       cv::warpPerspective(Gframe,warpedFrame,warpMatrix,fieldSize,cv::INTER_LINEAR,
                           cv::BORDER_CONSTANT, cv::Scalar() );
-    }
+    }else if(k == 'c'){
+      state = 'c';
+      actionConfigureColors(cap,root);
+    }else if(k == 's') {
+      //função de escrever no json
+      std::ofstream configs;
+      configs.open("configs.json");
 
+      Json::StyledWriter styledWriter;
+      configs << styledWriter.write(root);
+
+      configs.close();
+    }
   }
   return 0;
 }
@@ -299,7 +261,7 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 	cv::Mat temp = src.clone();
 
 	if( !temp.empty())
-		cv::findContours(temp,contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+		cv::findContours(temp,contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);
 		//select best contour
 		std::vector<std::vector<cv::Point> > contours_poly( contours.size() );
 		std::vector<cv::Point2f> center( contours.size() );
@@ -414,8 +376,14 @@ void actionPickCorners(cv::VideoCapture &cap, Json::Value &root) {
   for(;;) {
         int k = cv::waitKey(30);
         if (k == 27 || k == 'q'){
-          state = 'c';
+          state = 'd';
           break;
+        }else if(k == 's') {
+          std::ofstream configs;
+          configs.open("configs.json");
+          Json::StyledWriter styledWriter;
+          configs << styledWriter.write(root);
+          configs.close();
         }else if(k >= 49 and k <= 52)  //Change the selected corner on press 1-4 key
           selectedCorner = k - 49;
         else if(k >= 73 and k <= 76) { //Move 1px when
@@ -484,11 +452,102 @@ void actionPickCorners(cv::VideoCapture &cap, Json::Value &root) {
       root["fieldCorners"][i][1] = fieldCorners[i].y;
     }
 
-    std::ofstream configs;
-    configs.open("configs.json");
+}
 
-    Json::StyledWriter styledWriter;
-    configs << styledWriter.write(root);
+void actionConfigureColors(cv::VideoCapture &cap, Json::Value &root) {
 
-    configs.close();
+  int selectedColor = 0;
+  std::string Scolor = "blue";
+  //Radius of measure Color mean
+  int offset = 10;
+
+  cv::namedWindow("pickColors");
+  cv::setMouseCallback("pickColors", CallBackFunc);
+
+  for(;;) {
+    cv::Mat frame;
+    cap >> frame;
+
+    switch(selectedColor) {
+      case 0: {
+        Scolor = "blue";
+        std::string status( "Pick color blue");
+        cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
+        break;
+      }
+      case 1: {
+        Scolor = "green";
+        std::string status( "Pick color green");
+        cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
+        break;
+      }
+      case 2:{
+        Scolor = "orange";
+        std::string status( "Pick color orange");
+        cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
+        break;
+      }
+      case 3: {
+        Scolor = "purple";
+        std::string status( "Pick color purple");
+        cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
+        break;
+      }
+      case 4: {
+        Scolor = "red";
+        std::string status( "Pick color red");
+        cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
+        break;
+      }
+      case 5:{
+        Scolor = "yellow";
+        std::string status( "Pick color yellow");
+        cv::putText(frame, status, cv::Point(10,30), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                    cv::Scalar(255, 0, 0), 2, cv::LINE_8, false);
+        break;
+      }
+    }
+
+    //Get LAB Color of Mouse point
+    std::stringstream ss1, ss2, ss3;
+    int color_lab_L = round(mean_color[0]);
+    ss1 << color_lab_L;
+    int color_lab_A = round(mean_color[1]);
+    ss2 << color_lab_A;
+    int color_lab_B = round(mean_color[2]);
+    ss3 << color_lab_B;
+    std::string color_lab("["+ ss1.str() +","+ ss2.str() +","+ ss3.str() +"]");
+
+    cv::putText(frame, color_lab, cv::Point(10,60), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+                cv::Scalar(55, 255, 55), 2, cv::LINE_8, false);
+
+    cv::circle(frame,cv::Point(x_color,y_color),offset,cv::Scalar(255,255,0),1);
+
+    cv::imshow("pickColors", frame);
+
+    int k = cv::waitKey(30);
+    if( k==27 || k == 'q') {
+      state = 'd';
+      break;
+    }else if( k >= 49 && k <= 53) {
+      selectedColor = k - 49;
+    }else if(k == 's') {
+      //função de gravar no json
+      root["colors"][Scolor][0] = color_lab_L;
+      root["colors"][Scolor][1] = color_lab_A;
+      root["colors"][Scolor][2] = color_lab_B;
+      std::ofstream configs;
+      configs.open("configs.json");
+      Json::StyledWriter styledWriter;
+      configs << styledWriter.write(root);
+      configs.close();
+    }
+  }
+  cv::destroyWindow("pickColors");
+
 }
