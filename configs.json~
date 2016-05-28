@@ -1,8 +1,8 @@
 {
-   "ball_radius" : 104.42916107177734,
-   "ball_x" : 943.13067626953125,
-   "ball_y" : 596.07183837890625,
-   "camera" : "/dev/video0",
+   "ball_radius" : 39,
+   "ball_x" : 388,
+   "ball_y" : 263,
+   "camera" : "/dev/video1",
    "cameraRes" : [ 720, 480 ],
    "circleWarpSize" : 100,
    "colors" : [

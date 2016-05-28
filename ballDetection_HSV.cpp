@@ -6,9 +6,10 @@
 #include <fstream>
 #include <vector>
 
-//global variables for pick color function
-cv::Scalar myints(16,2,77,29);
-int x_color = 0, y_color = 0;
+//global variables
+cv::Mat Gframe;
+cv::Scalar mean_color(0,0,0);
+double x_color = 0, y_color = 0;
 int colorH = 10, colorS = 229, colorV = 255, rangeH = 10, rangeS = 30, rangeV = 81;
 cv::Point2f fieldCorners[4];
 double resize = 0.5;
@@ -110,34 +111,6 @@ int main(int, char**){
     	offset = 10
 
 
-    	def handleMouse(event, x, y, flags, params):
-    		global meanColor,x_color,y_color
-    		if event == cv2.EVENT_LBUTTONUP:
-    			# Get click x y position to a global variable
-    			x_color = x
-    			y_color = y
-
-    			x1 = int(x - offset); x2 = int(x + offset);
-    			y1 = int(y - offset); y2 = int(y + offset);
-
-    			# Check if it exeeds the boundaries
-    			if(x1 < 0 or y1 < 0 or  x2 >= frameSize[0] or y2 >= frameSize[1]):
-    				print "!!! Exeecds boundaries";
-    				return
-
-    			# Get Region of Interest
-    			roi = frame[y1:y2, x1:x2];
-    			roi = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
-
-    			#create a round mask
-    			mask_pickcolor = np.ones((offset*2,offset*2,1),np.uint8)
-    			cv2.circle(mask_pickcolor,(offset,offset),offset,(255),-1)
-
-    			# Blur Image
-    			roi = cv2.GaussianBlur(roi, (3, 3), 0)
-
-    			# Find Mean of colors (Excluding outer areas)
-    			meanColor = cv2.mean(roi,mask_pickcolor)
 
     	cv2.namedWindow("pickColors");
     	cv2.setMouseCallback("pickColors", handleMouse);
@@ -236,20 +209,20 @@ int main(int, char**){
     t.end();
     */
 
-    cv::Mat frame, bin;
-    cap >> frame; // get a new frame from camera
-    cv::Mat warpedFrame = frame.clone();
-    cv::warpPerspective(frame,warpedFrame,warpMatrix,frame.size(),cv::INTER_NEAREST,
+    cv::Mat bin;
+    cap >> Gframe; // get a new frame from camera
+    cv::Mat warpedFrame = Gframe.clone();
+    cv::warpPerspective(Gframe,warpedFrame,warpMatrix,Gframe.size(),cv::INTER_NEAREST,
                         cv::BORDER_CONSTANT, cv::Scalar() );
-    frame = warpedFrame;
+    Gframe = warpedFrame;
     warpedFrame.release();
 
-    colorDetection(frame, bin, 2);
+    colorDetection(Gframe, bin, 2);
 
     std::vector<std::vector<cv::Point> > contours;
     std::vector<cv::Vec4i> hierarchy;
 
-    findPos(bin, frame, contours, hierarchy, root, FIELD_MM);
+    findPos(bin, Gframe, contours, hierarchy, root, FIELD_MM);
 
     //show results
     //Create a window
@@ -258,7 +231,7 @@ int main(int, char**){
     //set the callback function for any mouse event
     cv::setMouseCallback("Frame", CallBackFunc, NULL);
 
-    cv::imshow("Frame",frame);
+    cv::imshow("Frame",Gframe);
 
     int k = cv::waitKey(30);
     if (k == 27 || k == 'q')
@@ -267,7 +240,7 @@ int main(int, char**){
       state = 'f';
       actionPickCorners(cap, root);
       warpMatrix = fieldCornersUpdated(fieldCorners, frameSize);
-      cv::warpPerspective(frame,warpedFrame,warpMatrix,fieldSize,cv::INTER_LINEAR,
+      cv::warpPerspective(Gframe,warpedFrame,warpMatrix,fieldSize,cv::INTER_LINEAR,
                           cv::BORDER_CONSTANT, cv::Scalar() );
     }
 
@@ -296,6 +269,7 @@ void createTrackBars(){
 
 void on_trackbar(int){};
 
+//Function to create a color mask and "cut" the ball in the source image
 void colorDetection(cv::Mat src, cv::Mat &mask, int it){
 	cv::Mat hsv, tgt, thrs;
 	//3-channel binary mask
@@ -319,6 +293,7 @@ void colorDetection(cv::Mat src, cv::Mat &mask, int it){
 
 }
 
+//Function to find the ball position in the screen
 void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours,
               std::vector<cv::Vec4i> &hierarchy, Json::Value &root, float k){
 	cv::Mat temp = src.clone();
@@ -367,13 +342,43 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 		}
 }
 
+//function to treat the events (mouse click) in the created windows
 void CallBackFunc(int event, int x, int y, int flags, void* userdata) {
     switch (state) {
       case 'c':
-        if  ( event == cv::EVENT_LBUTTONDOWN )
-        {
-             x_color = x;
-   					 y_color = y;
+    		if (event == cv::EVENT_LBUTTONUP) {
+    			//Get click x y position to a global variable
+    			x_color = x;
+    			y_color = y;
+          int offset = 10;
+    			int x1 = int(x - offset), x2 = int(x + offset);
+    			int y1 = int(y - offset), y2 = int(y + offset);
+
+    			//Check if it exeeds the boundaries
+    			if(x1 < 0 or y1 < 0 or  x2 >= Gframe.cols or y2 >= Gframe.rows) {
+           	std::cout << "!!! Exeecds boundaries" << std::endl;
+    				return;
+          }
+
+    			//Get Region of Interest
+    			cv::Rect roi(x1,y1,x2-x1, y2-y1);
+          cv::Mat image_roi = Gframe(roi);
+    			cv::cvtColor(image_roi,image_roi, cv::COLOR_BGR2Lab, 0);
+
+          //create a round mask
+          cv::Mat mask_pickcolor(offset*2,offset*2,CV_8UC1,cv::Scalar(1,1,1));
+          cv::circle(mask_pickcolor,
+                    //center
+                    cv::Point(offset, offset),
+                    //radius
+                    offset,
+                    cv::Scalar(255,255,255), -1, 8 , 0 );
+
+    			//Blur Image
+          cv::GaussianBlur(image_roi, image_roi, cv::Size(3, 3),0,0);
+
+    			//Find Mean of colors (Excluding outer areas)
+    			mean_color = cv::mean(image_roi,mask_pickcolor);
         }
         break;
       case 'f':
@@ -385,6 +390,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata) {
     }
 }
 
+//function to create the matrix to change the perspective of the image
 cv::Mat fieldCornersUpdated(cv::Point2f perspectiveIn[], cv::Size fieldSize){
   cv::Point2f perspectiveOut[] = { cv::Point2f(0.0, 0.0),
                                  cv::Point2f(fieldSize.width , 0.0),
@@ -401,6 +407,7 @@ cv::Mat fieldCornersUpdated(cv::Point2f perspectiveIn[], cv::Size fieldSize){
   return cv::getPerspectiveTransform(perspectiveIn, perspectiveOut);
 }
 
+//function to choose the appropriate corner points to the field
 void actionPickCorners(cv::VideoCapture &cap, Json::Value &root) {
   cv::namedWindow("pickCorners");
   cv::setMouseCallback("pickCorners", CallBackFunc);

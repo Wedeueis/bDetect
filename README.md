@@ -5,9 +5,12 @@ This program is in development to integrate a wide solution for the competition 
 This is a work in progress!
 
 # Compiling instructions for a linux environment
+In order to compile this program you will need the opencv 3.0.1 and the jsoncpp librarys installed in your system. Go to the folder containing all the files of the program and type in the terminal:
+
 `make`
 
 # Usage
+After finishing the compillation process run the program by typing in the terminal:
 
 `./ballDetection_HSV`
 
