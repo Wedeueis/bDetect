@@ -1,23 +1,23 @@
 {
    "ball_radius" : 21,
-   "ball_x" : 2095,
-   "ball_y" : 1011,
-   "camera" : "/dev/video0",
+   "ball_x" : 903,
+   "ball_y" : 280,
+   "camera" : "/dev/video1",
    "cameraRes" : [ 720, 480 ],
    "circleWarpSize" : 100,
    "colors" : {
-      "blue" : [ 10, 247, 239 ],
+      "blue" : [ 28, 227, 238 ],
       "green" : [ 106, 142, 0 ],
-      "orange" : [ 24, 231, 229 ],
+      "orange" : [ 27, 221, 237 ],
       "purple" : [ 131, 106, 0 ],
       "red" : [ 163, 137, 0 ],
       "yellow" : [ 126, 165, 0 ]
    },
    "fieldCorners" : [
-      [ 0, 6 ],
-      [ 636, 6 ],
-      [ 636, 472 ],
-      [ 0, 472 ]
+      [ 4, 0 ],
+      [ 632, 4 ],
+      [ 634, 476 ],
+      [ 2, 478 ]
    ],
    "fieldSize" : [ 510, 390 ],
    "fieldSizeMM" : [ 1700, 1300 ],

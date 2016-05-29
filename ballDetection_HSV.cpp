@@ -26,6 +26,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata);
 void colorDetection(cv::Mat src, cv::Mat &mask,cv::Scalar colors[], int it);
 void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &contours,
               std::vector<cv::Vec4i> &hierarchy, Json::Value &root, float k);
+void saveInJson(Json::Value root);
 
 int main(int, char**){
   //loading and testing json file
@@ -199,13 +200,7 @@ int main(int, char**){
       actionConfigureColors(cap,root);
     }else if(k == 's') {
       //função de escrever no json
-      std::ofstream configs;
-      configs.open("configs.json");
-
-      Json::StyledWriter styledWriter;
-      configs << styledWriter.write(root);
-
-      configs.close();
+      saveInJson(root);
     }
   }
   return 0;
@@ -318,7 +313,7 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 		for( int i = 0; i < contours.size(); i++ ){
 			//cv::approxPolyDP( cv::Mat(contours[i]), contours_poly[i], 3, true );//verificar se eh necessario
 			cv::minEnclosingCircle( (cv::Mat)contours[i], center[i], radius[i] );
-      //radius[i] /= k;
+      radius[i] /= k;
 			radiusDif = abs(realBallRadius - radius[i]);
 			if(bestBall == 0 || radiusDif < bestBallRadiusDif){
         ball = 1;
@@ -331,14 +326,10 @@ void findPos(cv::Mat &src,cv::Mat &tgt, std::vector<std::vector<cv::Point> > &co
 		}
 
 		if(ball != 0){
-			cv::circle( tgt, center[bestBall], (int)radius[bestBall], cv::Scalar(255,0,0), 2, 8, 0 );
+			cv::circle( tgt, center[bestBall], (int)(radius[bestBall]*k), cv::Scalar(255,0,0), 2, 8, 0 );
       root["ball_x"] = (int)(center[bestBall].x/k);
       root["ball_y"] = (int)(center[bestBall].y/k);
-      std::ofstream configs;
-      configs.open("configs.json");
-      Json::StyledWriter styledWriter;
-      configs << styledWriter.write(root);
-      configs.close();
+      saveInJson(root);
 		}
 }
 
@@ -417,11 +408,7 @@ void actionPickCorners(cv::VideoCapture &cap, Json::Value &root) {
           state = 'd';
           break;
         }else if(k == 's') {
-          std::ofstream configs;
-          configs.open("configs.json");
-          Json::StyledWriter styledWriter;
-          configs << styledWriter.write(root);
-          configs.close();
+          saveInJson(root);
         }else if(k >= 49 and k <= 52)  //Change the selected corner on press 1-4 key
           selectedCorner = k - 49;
         else if(k >= 73 and k <= 76) { //Move 1px when
@@ -579,13 +566,17 @@ void actionConfigureColors(cv::VideoCapture &cap, Json::Value &root) {
       root["colors"][Scolor][0] = color_hsv_H;
       root["colors"][Scolor][1] = color_hsv_S;
       root["colors"][Scolor][2] = color_hsv_V;
-      std::ofstream configs;
-      configs.open("configs.json");
-      Json::StyledWriter styledWriter;
-      configs << styledWriter.write(root);
-      configs.close();
+      saveInJson(root);
     }
   }
   cv::destroyWindow("pickColors");
 
+}
+
+void saveInJson(Json::Value root) {
+  std::ofstream configs;
+  configs.open("configs.json");
+  Json::StyledWriter styledWriter;
+  configs << styledWriter.write(root);
+  configs.close();
 }
