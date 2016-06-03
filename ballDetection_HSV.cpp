@@ -169,7 +169,7 @@ int main(int, char**){
     Gframe = warpedFrame;
     warpedFrame.release();
 
-    colorDetection(Gframe, bin, colors, 3);
+    colorDetection(Gframe, bin, colors , 3);
 
     std::vector<std::vector<cv::Point> > contours;
     std::vector<cv::Vec4i> hierarchy;
@@ -235,7 +235,7 @@ void colorDetection(cv::Mat src, cv::Mat &mask, cv::Scalar colors[], int it){
 	cv::GaussianBlur(hsv, hsv, cv::Size(3, 3),0,0);
 	cv::inRange(hsv, cv::Scalar(colors[2][0] - rangeH, colors[2][1] - rangeS, colors[2][2] - rangeV),
               cv::Scalar(colors[2][0]  + rangeH + 1 , colors[2][1]  + rangeS + 1, colors[2][2]  + rangeV + 1), mask);
-  hsv.release();
+  //hsv.release();
 	//image erosion
 	cv::Mat element = cv::getStructuringElement( cv::MORPH_RECT,cv::Size( 21,21 ),cv::Point( -1, -1 ) );
   cv::Mat element2 = cv::getStructuringElement( cv::MORPH_RECT,cv::Size( 11,11 ),cv::Point( -1, -1 ) );
@@ -248,7 +248,7 @@ void colorDetection(cv::Mat src, cv::Mat &mask, cv::Scalar colors[], int it){
 	cv::bitwise_and(thrs, src, tgt);
 
 	cv::imshow("Bola", tgt);
-	cv::imshow("HSV", mask);
+	cv::imshow("HSV", hsv);
 
 }
 
@@ -366,6 +366,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata) {
                     cv::Scalar(255,255,255), -1, 8 , 0 );
 
     			//Blur Image
+          cv::cvtColor(image_roi,image_roi,cv::COLOR_BGR2HSV);
           cv::GaussianBlur(image_roi, image_roi, cv::Size(3, 3),0,0);
 
     			//Find Mean of colors (Excluding outer areas)
